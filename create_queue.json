@@ -1,0 +1,5 @@
+{
+    "MessageRetentionPeriod": "43200",
+    "FifoQueue": "true",
+    "ContentBasedDeduplication": "true"
+}
