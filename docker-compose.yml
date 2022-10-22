@@ -52,7 +52,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
+          cpus: '4' # you will be limited by your Docker Desktop preferences here: Preferences/Resources/Advanced/CPUs
           memory: 1024M
       mode: replicated
       replicas: 2

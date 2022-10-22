@@ -43,15 +43,6 @@ sqs_setup () {
 }
 #################### End Functions #####################
 
-
-if [[ $1 == "deploy" ]]; then
-    echo "Refreshing LocalStack and populating SQS..."
-    docker-compose down --remove-orphans
-    docker-compose up --detach localstack
-    sqs_setup
-    docker-compose up --detach director
-    docker-compose up --detach worker
-fi
 if [[ $1 == "build" ]]; then
     echo "Taking containers down for a build, bringing up LocalStack and SQS..."
     docker-compose down --remove-orphans
@@ -60,14 +51,53 @@ if [[ $1 == "build" ]]; then
 
     echo "Building container image for the director..."
     cd src/transcribe-director
-    docker build --network host -t transcribe-director:latest .
+    docker build --network host -t transcribe-director:latest . # not sure network host is still required...
     cd ../..
 
     echo "Building container image for the worker..."
     cd src/transcribe-worker
-    docker build --network host -t transcribe-worker:latest .
+    docker build --network host -t transcribe-worker:latest . # not sure network host is still required...
     cd ../..
 fi
 if [[ -z $1 ]]; then
     echo "Please specify an argument: build | deploy"
 fi
+
+if [[ $1 == "deploy" || $2 == "deploy" ]]; then
+    echo "Refreshing LocalStack and populating SQS..."
+    docker-compose down --remove-orphans
+    docker-compose up --detach localstack
+    sqs_setup
+    docker-compose up --detach director
+    docker-compose up --detach worker
+fi
+
+if [[ $1 == "queue-stats" ]]; then
+    QUEUE_URL=`get_sqs_queue_url`
+    ALL_STATS=`awslocal sqs get-queue-attributes --queue-url $QUEUE_URL --attribute-names All`
+    MSG_COUNT=`echo $ALL_STATS | jq -r '.Attributes.ApproximateNumberOfMessages'`
+    IN_FLIGHT_MSG_COUNT=`echo $ALL_STATS | jq -r '.Attributes.ApproximateNumberOfMessagesNotVisible'`
+    echo "SQS: There are $MSG_COUNT items in the queue, with $IN_FLIGHT_MSG_COUNT actively being processed."
+fi
+
+# Sample 'all attributes' for our queue.
+# {
+#     "Attributes": {
+#         "ApproximateNumberOfMessages": "150",
+#         "ApproximateNumberOfMessagesNotVisible": "2",
+#         "ApproximateNumberOfMessagesDelayed": "0",
+#         "CreatedTimestamp": "1666453414",
+#         "DelaySeconds": "0",
+#         "LastModifiedTimestamp": "1666453414",
+#         "MaximumMessageSize": "262144",
+#         "MessageRetentionPeriod": "43200",
+#         "QueueArn": "arn:aws:sqs:us-east-1:000000000000:transcription_jobs.fifo",
+#         "ReceiveMessageWaitTimeSeconds": "15",
+#         "VisibilityTimeout": "1800",
+#         "SqsManagedSseEnabled": "false",
+#         "ContentBasedDeduplication": "true",
+#         "DeduplicationScope": "queue",
+#         "FifoThroughputLimit": "perQueue",
+#         "FifoQueue": "true"
+#     }
+# }
