@@ -5,7 +5,7 @@ One of my long-standing (*many years*) tasks is to convert all my recordings of 
 
 This uses [Whisper](https://github.com/openai/whisper), [Localstack](https://localstack.cloud/), and some Python applications I ~~copy-pasted~~ wrote.  You supply a source directory with your audio recordings (*coded for MP3, but can be anything*) and a destination directory to put transcriptions into.  On each running the stack a list of files to be processed is generated (*compare source files against completed transcriptions*), and the workers pull from this list - one at a time - until the list is exhausted.
 
-I would say it's ~95% accurate - I was sufficiently impressed that I build this tooling.
+I would say it's ~95% accurate - I was sufficiently impressed that I built this tooling.
 
 ## Getting started
 1. Configure the source (*my audio_recording.MP3 files*) and destination (*where the transcript files will go*) directories
@@ -16,9 +16,8 @@ I would say it's ~95% accurate - I was sufficiently impressed that I build this 
 3. Run `./build.sh build deploy`
     - Subsequent runs only need: `./build.sh deploy`
     - Note that the worker container image is `3.57GB` (*ffmpeg, openai dependencies, whisper model cache, etc*), so it'll take a while.
-4. Magic happens, your CPU usage goes bananas. :fan:
-5. Go do other things like sleep.
-6. Check your progress: `watch -n 15 ./build.sh queue-stats`
+4. Magic happens, your CPU usage goes bananas.  Go do other things like sleep.
+6. Check your progress: `./build.sh queue-stats` or `watch -n 15 ./build.sh queue-stats`
 > There are 150 items in the queue, with 2 actively being processed.
 7. Transcript files (*.txt, .vtt, .srt*) start appearing in your destination dir
 8. \o/
@@ -83,7 +82,7 @@ I wanted to ensure that there were no duplicates created (*wasted CPU time*), so
 Key points are...
 - FifoQueue: this configures the queue from default 'standard' to 'fifo'; going for 'exactly once' message processing
 - ContentBasedDeduplication: with our config, it hashes the message body as a UID (*our director diff code ensures this is always going to be unique*)
-- VisibilityTimeout: How long SQS prevents other consumers from picking the message up.
+- VisibilityTimeout: How long SQS prevents other consumers from picking the message up.  Set to max in case of ultra-poor performance.
 - MessageRetentionPeriod: Drop message from queue after this many seconds.
 - ReceiveMessageWaitTimeSeconds: Long polling, just for Jeff.
 
@@ -94,7 +93,7 @@ Key points are...
     "FifoQueue": "true",
     "ContentBasedDeduplication": "true",
     "ReceiveMessageWaitTimeSeconds": "15",
-    "VisibilityTimeout": "1800"
+    "VisibilityTimeout": "43200"
 }
 ```
 
@@ -127,13 +126,14 @@ Key points are...
 ## Docker
 - https://testdriven.io/blog/docker-best-practices/
 
-# TODO: active issues
+# TODO: backlog of bugs and ideas
 - ~~director can't find /source~~ can't have quotes on compose vol paths
 - ~~worker can't talk to sqs~~ docker-compose networking was wonky, using links now
 - ~~worker not putting files into output dir~~ i needed to add docker-compose volumes to the paths
 - ~~build.sh always destroys localstack~~ had some fun with bash functions
 - ~~worker build times are long~~ created a whisper_init script to pull the model into a stored cache
   - ~~The worker build takes a long time (~5m) due to having to download the language model on each RUN python main.py, if not already cached todo: can we cache that?~~
+- ~~message queue returning messages to 'visible' after 30 minutes~~ (*this was the below 'dupe processing' bug*)
 - add image cleanup to the build, versioning for tags
 - can we get rid of the whisperUtils.py?
 - add linting - hadolint, pylint
@@ -146,51 +146,12 @@ Key points are...
   - ~~need a 'sqs queue contents monitor' that doesn't actually pull messages...~~
   - ~~suspect you can get metrics for this in real SQS/CloudWatch (*msgs in queue, msgs w. lock*)~~
   - FIGURED IT OUT.  get-queue-attributes provides these metrics.  i added a cmd: `./build.sh queue-stats`
-- workers pulling same message : ~~leaving this for now, only going to run one worker~~...this can be a future fix
-  - it mostly works, had to un-async the 'act on the message' functions - the transcribe was blocking, but the message pull was not.
-  - for some reason duplicates are happening;
-    - one hour apart (*processing time related, not specific timer...?...*) (*message visibility is two hours*)
-    - no actual output file issues
-    - one took 30m to process, the other 61m
-    - i think my minimal understanding of sqs messaging is the issue here...
-    - message group id is static; in theory this means the messages need to be processed in order
-```
-worker1
-/source/120101_001.MP3
-/source/120105_002.MP3 <-- dupe
-/source/120108_001.MP3
-
-2022-10-22 00:22:16,524 - __main__ - INFO - Received message to process: /source/120101_001.MP3
-2022-10-22 00:22:16,528 - __main__ - INFO - Transcribing: /source/120101_001.MP3
-2022-10-22 00:30:26,592 - __main__ - INFO - Transcribing completed for: /source/120101_001.MP3
-
-2022-10-22 00:30:26,610 - __main__ - INFO - Received message to process: /source/120105_002.MP3
-2022-10-22 00:30:26,611 - __main__ - INFO - Transcribing: /source/120105_002.MP3
-2022-10-22 01:31:16,790 - __main__ - INFO - Transcribing completed for: /source/120105_002.MP3
-why did this take 61 minutes...and received at 0030
-
-
-2022-10-22 01:31:16,807 - __main__ - INFO - Received message to process: /source/120108_001.MP3
-2022-10-22 01:31:16,809 - __main__ - INFO - Transcribing: /source/120108_001.MP3
-2022-10-22 01:58:15,673 - __main__ - INFO - Transcribing completed for: /source/120108_001.MP3
-2022-10-22 01:58:30,687 - __main__ - INFO - No messages in the queue, we are done here.
-
-worker2
-/source/120105_001.MP3
-/source/120107_001.MP3
-/source/120105_002.MP3 <-- dupe
-
-2022-10-22 00:22:21,325 - __main__ - INFO - Received message to process: /source/120105_001.MP3
-2022-10-22 00:22:21,328 - __main__ - INFO - Transcribing: /source/120105_001.MP3
-2022-10-22 00:56:36,349 - __main__ - INFO - Transcribing completed for: /source/120105_001.MP3
-2022-10-22 00:56:36,365 - __main__ - INFO - Received message to process: /source/120107_001.MP3
-2022-10-22 00:56:36,367 - __main__ - INFO - Transcribing: /source/120107_001.MP3
-2022-10-22 01:30:13,627 - __main__ - INFO - Transcribing completed for: /source/120107_001.MP3
-
-2022-10-22 01:30:13,642 - __main__ - INFO - Received message to process: /source/120105_002.MP3
-2022-10-22 01:30:13,643 - __main__ - INFO - Transcribing: /source/120105_002.MP3
-2022-10-22 02:04:50,764 - __main__ - INFO - Transcribing completed for: /source/120105_002.MP3
-but this only take 35 minutes..., and received an hour later?
-
-2022-10-22 02:05:05,785 - __main__ - INFO - No messages in the queue, we are done here.
-```
+- ~~workers pulling same message : leaving this for now, only going to run one worker...this can be a future fix~~
+  - ~~it mostly works, had to un-async the 'act on the message' functions - the transcribe was blocking, but the message pull was not.~~
+  - ~~for some reason duplicates are happening;~~
+    - ~~one hour apart (*processing time related, not specific timer...?...*) (*message visibility is two hours*)~~
+    - ~~no actual output file issues~~
+    - ~~one took 30m to process, the other 61m~~
+    - ~~i think my minimal understanding of sqs messaging is the issue here...~~
+    - ~~message group id is static; in theory this means the messages need to be processed in order~~
+    - FIGURED IT OUT.  visibility timeout was 30m (*i.e. sqs made the messages available for re-consumption after 30m*) - but the processing time was greater than that.  maxed the value out.

@@ -3,5 +3,5 @@
     "FifoQueue": "true",
     "ContentBasedDeduplication": "true",
     "ReceiveMessageWaitTimeSeconds": "15",
-    "VisibilityTimeout": "1800"
+    "VisibilityTimeout": "43200"
 }
