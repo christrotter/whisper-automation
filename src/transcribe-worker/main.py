@@ -55,6 +55,7 @@ logger.info(endpoint_url)
 sqs = boto3.resource('sqs', endpoint_url=endpoint_url, config=aws_config, aws_access_key_id = "foo", aws_secret_access_key = "foo")
 queue_name = "transcription_jobs.fifo"
 
+whisper_directory   = os.environ.get('WHISPER_DIR', './whisper')
 source_directory    = os.environ.get('SOURCE_DIR', '../../source')
 dest_directory      = os.environ.get('DEST_DIR', '../../dest')
 
@@ -133,9 +134,8 @@ try:
     logger.info('-'*88)
     logger.info("Starting transcribe worker...")
     logger.info('-'*88)
-    logger.info("Downloading Whisper model before starting loop - this takes some time... ")
-    # todo: try/catch this
-    model = whisper.load_model("base")
+    logger.info("Loading Whisper model before starting loop - if not cached, this will take some time... ")
+    model = whisper.load_model("base", download_root=whisper_directory)
     logger.info("Whisper model downloaded, starting event loop.")
     loop = asyncio.new_event_loop()
     asyncio.run(main(model))

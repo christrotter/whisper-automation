@@ -9,6 +9,8 @@ RUN export DEBIAN_FRONTEND=noninteractive \
 
 RUN python3 -m pip install boto3 setuptools
 RUN python3 -m pip install git+https://github.com/openai/whisper.git
-RUN mkdir /source && mkdir /dest
+RUN mkdir /source && mkdir /dest && mkdir /whisper
+COPY ./init_whisper.py /app
+RUN python init_whisper.py
 COPY . /app
 CMD [ "python", "main.py" ]
