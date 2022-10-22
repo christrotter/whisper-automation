@@ -1,13 +1,13 @@
 # whisper-automation
-Problem space:  You have a pile of voice recordings that you want transcribed - even mostly accurately - and doing it manually is painful.  With even a halfway good copy to start the task of 'doing something with the recordings' suddenly becomes easier.
+*Problem space*:  You have a pile of voice recordings that you want transcribed - even mostly accurately - and doing it manually is painful.  With even a halfway good copy to start the task of 'doing something with the recordings' suddenly becomes easier.  So, what is our friction-reducer?
 
-One of my long-standing (years...) tasks is to convert all my recordings of bedtime stories to transcripts, for eventually maybe writing some children's books.  It's the audio equivalent to your digital photo folder that's impossibly huge and disorganized.
+One of my long-standing (*many years*) tasks is to convert all my recordings of bedtime stories to transcripts, for eventually maybe writing some children's books.  It's the audio equivalent to your digital photo folder that's impossibly huge and disorganized and drives you immediately to procrastination in the form of la-la-la-la-I-can't-hear-you. <img src="images/awesome.png" width="20">
 
-This uses [Whisper](https://github.com/openai/whisper), [Localstack](https://localstack.cloud/), and some Python applications I ~~copy-pasted~~ wrote.  You supply a source directory with your audio recordings (coded for MP3, but can be anything) and a destination directory to put transcriptions into.  On each running the stack a list of files to be processed is generated (compare source files against completed transcriptions), and the workers pull from this list - one at a time - until the list is exhausted.
+This uses [Whisper](https://github.com/openai/whisper), [Localstack](https://localstack.cloud/), and some Python applications I ~~copy-pasted~~ wrote.  You supply a source directory with your audio recordings (*coded for MP3, but can be anything*) and a destination directory to put transcriptions into.  On each running the stack a list of files to be processed is generated (*compare source files against completed transcriptions*), and the workers pull from this list - one at a time - until the list is exhausted.
 
-## Performance {#performance}
+## Performance
 This absolutely can crush your CPU, so I broke the job processing down with horizontal scaling.  Just configure (in `docker-compose.yml`) how many worker replicas you want running, and how much CPU they each get.
-> NOTE: The workers run at 'allofit' (100%) CPU during transcription.
+> NOTE: The workers run at 'allofit' (*100%*) CPU during transcription.
 ```
 e.g. you want three workers with three cores each...
   worker:
@@ -18,12 +18,12 @@ e.g. you want three workers with three cores each...
       mode: replicated
       replicas: 3
 ```
-This config absolutely hammers my MacBook Pro (2.6 GHz 6-Core Intel Core i7).
+This config absolutely hammers my MacBook Pro (*2.6 GHz 6-Core Intel Core i7*).
 
 ## Getting started
-1. Configure the source (my audio_recording.MP3 files) and destination (where the transcript files will go) directories
+1. Configure the source (*my audio_recording.MP3 files*) and destination (*where the transcript files will go*) directories
     - `docker-compose.yml -> volumes` (*note, for both director and worker services...not sure how to DRY this*)
-2. Configure how many workers you want running (how baller is your rig?)
+2. Configure how many workers you want running (*how baller is your rig?*)
     - `docker-compose.yml -> deploy`
     - Suggest just doing one if you are uncertain.
 3. Run `./build.sh build && ./build.sh deploy`
@@ -31,7 +31,7 @@ This config absolutely hammers my MacBook Pro (2.6 GHz 6-Core Intel Core i7).
     - Note that the worker container image is `3.57GB`, so it'll take a while.
 4. Magic happens, your CPU usage goes bananas.
 5. Go do other things like sleep.
-6. Transcript files (.txt, .vtt, .srt) start appearing in your destination dir
+6. Transcript files (*.txt, .vtt, .srt*) start appearing in your destination dir
 7. \o/
 
 ## Interrupted?
@@ -47,8 +47,24 @@ If you have to reboot or the process is interrupted in any way, all you lose is 
 <img src="images/transcriber-arch.png" width="600">
 
 ## SQS notes
-I wanted to ensure that there were no duplicates created (wasted CPU time), so FIFO with content deduplication seemed the right path.
-- `create_queue.json` has details on the config
+I wanted to ensure that there were no duplicates created (*wasted CPU time*), so FIFO with content deduplication seemed the right path.
+
+Key points are...
+- FifoQueue: this configures the queue from default 'standard' to 'fifo'
+- ContentBasedDeduplication: with our config, it hashes the message body (*our director diff code ensures this is always going to be unique*) as a UID
+- VisibilityTimeout: How long SQS prevents other consumers from picking the message up. (https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html)
+- MessageRetentionPeriod:
+
+### create_queue.json
+``` json
+{
+    "MessageRetentionPeriod": "43200",
+    "FifoQueue": "true",
+    "ContentBasedDeduplication": "true",
+    "ReceiveMessageWaitTimeSeconds": "15",
+    "VisibilityTimeout": "1800"
+}
+```
 
 
 # Learnings
@@ -57,10 +73,10 @@ I wanted to ensure that there were no duplicates created (wasted CPU time), so F
   - Which is still not great, cuz it's doing weird magic with stdout
 - SQS is a black box - have not found a way to 'see the queue'
 - Sometimes you just need a thing to run and be done, as a tool
-- Not everything needs to be an API (e.g. worker)
+- Not everything needs to be an API (*e.g. worker just pulling tasks*)
 - Using a logger instead of print
 - Bash functions are super handy, but not without limitations...
-- ...so creating python code to do the model init, better than bash (not even possible in bash?)
+- ...so creating python code to do the model init, better than bash (*not even possible in bash?*)
   - i.e. a new hammer
 - Using env vars with defaults
 - Writing code for containers requires ensuring it works locally AND in the container
@@ -92,11 +108,11 @@ I wanted to ensure that there were no duplicates created (wasted CPU time), so F
   - need to experiment with this one...tried with '3'...my laptop cpu caught on fire
 - sqs queue contents are a black box; no way to know what messages are in the queue, and what messages are locked for processing
   - need a 'sqs queue contents monitor' that doesn't actually pull messages...
-  - suspect you can get metrics for this in real SQS/CloudWatch (msgs in queue, msgs w. lock)
+  - suspect you can get metrics for this in real SQS/CloudWatch (*msgs in queue, msgs w. lock*)
 - workers pulling same message : ~~leaving this for now, only going to run one worker~~...this can be a future fix
   - it mostly works, had to un-async the 'act on the message' functions - the transcribe was blocking, but the message pull was not.
   - for some reason duplicates are happening;
-    - one hour apart (processing time related, not specific timer...?...) (message visibility is two hours)
+    - one hour apart (*processing time related, not specific timer...?...*) (*message visibility is two hours*)
     - no actual output file issues
     - one took 30m to process, the other 61m
     - i think my minimal understanding of sqs messaging is the issue here...

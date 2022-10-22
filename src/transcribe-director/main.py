@@ -49,8 +49,6 @@ logger.info(endpoint_url)
 sqs             = boto3.resource('sqs', endpoint_url=endpoint_url, config=aws_config, aws_access_key_id = "foo", aws_secret_access_key = "foo")
 queue_name      = "transcription_jobs.fifo"
 
-#source_directory    = "/Users/christrotter/Dropbox/Chris/Music/voice_recordings"
-
 source_directory    = os.environ.get('SOURCE_DIR', '../../source')
 dest_directory      = os.environ.get('DEST_DIR', '../../dest')
 
@@ -68,7 +66,7 @@ def getFilePathsToTranscribe():
         return file_list
 
     """
-        the whole point of this is purely to compare naming...not full file+extension
+        the whole point of this is purely to compare names...not full file+extension
         source: mp3
         dest: .txt, .srt, .vtt
         the NAME is the same, but extension changes.
@@ -91,12 +89,10 @@ def getFilePathsToTranscribe():
     source_files        = getMP3FilePathList(source_directory)
     dest_files          = getFilePathList(dest_directory)
     diff_files          = list(set(source_files) - set(dest_files))
-    #logger.info(diff_files)
 
     source_filenames    = getMP3FileNameList(source_files)
     dest_filenames      = getFileNameList(dest_files)
     diff_filenames      = list(set(source_filenames) - set(dest_filenames)) # set handles uniqueness, e.g. cuz there's multiple transcription files here
-    #logger.info(diff_filenames)
 
     # now we can take the filename diff and get all mp3 files matching from the source dir
     def getDiffedFiles(path, names):
@@ -157,8 +153,9 @@ try:
     logger.info('-'*88)
     #todo: test connections: to dirs, to sqs
     diff_list = getFilePathsToTranscribe()
-    logger.info("Here is our diff list:")
-    logger.info(diff_list)
+    diff_length = len(diff_list)
+    logger.info("Here is our diff list: %s", diff_list)
+    logger.info("Our diff list has this many items: %s", diff_length)
     loop = asyncio.new_event_loop()
     asyncio.run(publishJobs(diff_list))
 except KeyboardInterrupt:

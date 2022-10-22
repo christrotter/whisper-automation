@@ -52,10 +52,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '3'
+          cpus: '4'
           memory: 1024M
       mode: replicated
-      replicas: 3
+      replicas: 2
     links:
       - "localstack:localstack"
     volumes:
