@@ -85,6 +85,7 @@ async def processJob(queue, max_number, wait_time, model):
         with open(file_path, "r"):
             logger.info("Transcribing: %s", file_path)
             result = model.transcribe(file_path)
+            logger.info("Transcription complete, copying files...")
             saveTranscription(result, dest_directory, file_path)
             logger.info("Transcribing completed for: " + file_path)
 
