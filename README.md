@@ -49,7 +49,10 @@ e.g. you want three workers with three cores each...
 ```
 This config absolutely hammers my MacBook Pro (*2.6 GHz 6-Core Intel Core i7*).
 
-My unscientific testing results...
+My unscientific testing results...over 4.5 hours or so, 2 workers @ 4cpus chugged through 14 transcriptions.
+
+
+
 <table>
 <tr>
 <td> Worker cpu limit </td> <td> Worker count </td> <td> Time to transcribe </td>
