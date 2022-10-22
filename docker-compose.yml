@@ -38,7 +38,7 @@ services:
       - "/Users/christrotter/Desktop/processed_recordings:/dest"
   worker:
     image: transcribe-worker:latest
-    #container_name: "worker"
+    #container_name: "worker" #can't have static names set when using replicas, auto-sets: repo-name_servicename_qty
     environment:
       - AWS_PROFILE=localstack
       - AWS_DEFAULT_REGION=us-east-1
@@ -52,7 +52,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: 1.5
+          cpus: '3'
           memory: 1024M
       mode: replicated
       replicas: 3
