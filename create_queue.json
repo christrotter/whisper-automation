@@ -1,5 +1,7 @@
 {
     "MessageRetentionPeriod": "43200",
     "FifoQueue": "true",
-    "ContentBasedDeduplication": "true"
+    "ContentBasedDeduplication": "true",
+    "ReceiveMessageWaitTimeSeconds": "15",
+    "VisibilityTimeout": "1800"
 }

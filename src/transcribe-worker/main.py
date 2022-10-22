@@ -21,6 +21,7 @@
 import asyncio
 import os
 import logging
+from queue import Empty
 # for whisper transcription
 import whisper
 from whisperUtils import exact_div, format_timestamp, optional_int, optional_float, str2bool, write_txt, write_vtt, write_srt
@@ -33,7 +34,12 @@ import boto3
 from botocore.exceptions import ClientError
 from botocore.config import Config
 
-my_config = Config(
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+aws_config = Config(
     region_name = 'us-east-1',
     signature_version = 'v4',
     retries = {
@@ -42,22 +48,15 @@ my_config = Config(
     }
 )
 
-endpoint_url = "http://localhost:4566"
+endpoint_url = os.environ.get("LOCALSTACK_ENDPOINT")
+logger.info("Here is our endpoint url: ")
+logger.info(endpoint_url)
 # boto/localstack need the creds defined/set, but doesn't care what they are
-sqs = boto3.resource('sqs', endpoint_url=endpoint_url, config=my_config, aws_access_key_id = "foo", aws_secret_access_key = "foo")
+sqs = boto3.resource('sqs', endpoint_url=endpoint_url, config=aws_config, aws_access_key_id = "foo", aws_secret_access_key = "foo")
 queue_name = "transcription_jobs.fifo"
 
-#source_directory    = "/Users/christrotter/Desktop/source_recordings"
-#dest_directory      = "/Users/christrotter/Desktop/processed_recordings"
-source_directory    = os.environ.get('SOURCE_DIR', './')
-dest_directory      = os.environ.get('DEST_DIR', './')
-
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-loop = asyncio.get_event_loop() # sets our infinite loop; not a great choice according to docs...
+source_directory    = os.environ.get('SOURCE_DIR', '../../source')
+dest_directory      = os.environ.get('DEST_DIR', '../../dest')
 
 """
     One core limitation of SQS here is the dedupe/visibility timeout windows being fixed at 5 minutes.
@@ -77,64 +76,71 @@ def saveTranscription(result, output_dir, audio_path):
         write_srt(result["segments"], file=srt)
 
 async def processJob(queue, max_number, wait_time, model):
-    logger.debug("Pulling new SQS message.")
+    logger.info("Processing SQS messages...")
 
     # this should be a blocking call; do not want multiples of this running!
     def transcribeFile(model, file_path):
         logger.debug("Here is our file path: " + file_path)
         with open(file_path, "r"):
-            logger.debug("transcribing: ")
-            logger.debug(file_path)
-            result = model.transcribe(file_path, verbose="true")
+            logger.info("Transcribing: %s", file_path)
+            result = model.transcribe(file_path)
             saveTranscription(result, dest_directory, file_path)
-            logger.info("Completed transcription for: " + file_path)
+            logger.info("Transcribing completed for: " + file_path)
 
-    async def receiveMessages():
+    def receiveMessages():
         while True:
             try:
-                messages = queue.receive_messages(
-                    MessageAttributeNames=['All'],
-                    MaxNumberOfMessages=max_number,
-                    WaitTimeSeconds=wait_time
-                )
+                logger.info("Iterating over %s messages...", max_number)
+                try:
+                    messages = queue.receive_messages(
+                        MessageAttributeNames=['All'],
+                        MaxNumberOfMessages=max_number,
+                        WaitTimeSeconds=wait_time
+                    )
+                except:
+                    logger.exception("Couldn't receive messages from queue: %s", queue)
+                if messages == []:
+                    logger.info("No messages in the queue, we are done here.")
+                    break
                 for msg in messages:
-                    logger.info("Received message: %s: %s (receipt: %s)", msg.message_id, msg.body, msg.receipt_handle)
+                    logger.debug("Received message: %s: %s (receipt: %s)", msg.message_id, msg.body, msg.receipt_handle)
+                    logger.info("Received message to process: %s", msg.body)
                     message_body = str(msg.body)
-                    logger.debug("stringified msg body: " + message_body)
-                    transcription = transcribeFile(model, message_body)
-
+                    try:
+                        transcription = transcribeFile(model, message_body)
+                    except:
+                        logger.exception("Transcription blew up!")
                     msg.delete() # putting the receipt_handle in here didn't work, needs to be deconstructed
             except ClientError as error:
                 logger.exception("Couldn't receive messages from queue: %s", queue)
                 raise error
-#            else:
-#                return messages
-    await receiveMessages()
 
-async def proccessAudio(model):
-    print('-'*88)
+    receiveMessages()
+
+async def main(model):
+    logger.info('-'*88)
     logger.info("Starting job processing...")
-    print('-'*88)
+    logger.info('-'*88)
     queue = sqs.get_queue_by_name(QueueName=queue_name)
-    tsk = asyncio.create_task(processJob(queue,1,15,model))
+    logger.info("Connection to SQS: " + queue.url)
+    jobTask = asyncio.create_task(processJob(queue,1,15,model))
     async def pull_message():
-        while not tsk.done():
-            await asyncio.sleep(500)
+        while not jobTask.done():
+            await asyncio.sleep(0)
     await pull_message()
 
 try:
-    print('-'*88)
-    print("Starting transcribe worker...")
-    print('-'*88)
+    logger.info('-'*88)
+    logger.info("Starting transcribe worker...")
+    logger.info('-'*88)
     logger.info("Downloading Whisper model before starting loop - this takes some time... ")
     # todo: try/catch this
     model = whisper.load_model("base")
-    logger.info("Whisper model downloaded.")
-    asyncio.ensure_future(proccessAudio(model))
-    logger.debug("Entering infinite loop.")
-    loop.run_forever()
+    logger.info("Whisper model downloaded, starting event loop.")
+    loop = asyncio.new_event_loop()
+    asyncio.run(main(model))
 except KeyboardInterrupt:
     pass
 finally:
-    logger.debug("Closing infinite loop.")
+    logger.info("Exiting...")
     loop.close()

@@ -34,8 +34,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-loop = asyncio.get_event_loop() # sets our infinite loop; not a great choice according to docs...
-
 aws_config = Config(
     region_name = 'us-east-1',
     signature_version = 'v4',
@@ -44,17 +42,17 @@ aws_config = Config(
         'mode': 'standard'
     }
 )
-endpoint_url    = "http://localhost:4566"
+endpoint_url = os.environ.get("LOCALSTACK_ENDPOINT")
+logger.info("Here is our endpoint url: ")
+logger.info(endpoint_url)
 # it needs the creds defined, but doesn't care what they are
 sqs             = boto3.resource('sqs', endpoint_url=endpoint_url, config=aws_config, aws_access_key_id = "foo", aws_secret_access_key = "foo")
 queue_name      = "transcription_jobs.fifo"
 
 #source_directory    = "/Users/christrotter/Dropbox/Chris/Music/voice_recordings"
-#source_directory    = "/Users/christrotter/Desktop/source_recordings"
-#dest_directory      = "/Users/christrotter/Desktop/processed_recordings"
 
-source_directory    = os.environ.get('SOURCE_DIR', './')
-dest_directory      = os.environ.get('DEST_DIR', './')
+source_directory    = os.environ.get('SOURCE_DIR', '../../source')
+dest_directory      = os.environ.get('DEST_DIR', '../../dest')
 
 # why are these the same? one is 'only mp3 files' the other is 'any file'
 # so we'd need a param for adding the mp3 filter...but i'm not solid on what is actually needed
@@ -137,34 +135,34 @@ async def publish(queue, max_number, wait_time, diff_files):
     for file in diff_files:
         await publishMessages(file)
 
-async def createJobs(diff_files):
+async def publishJobs(diff_files):
     logger.info("Let's create some jobs...")
     queue = sqs.get_queue_by_name(QueueName=queue_name)
-    tsk = asyncio.create_task(publish(queue,1,15,diff_files))
+    logger.info(queue)
+    logger.info("Creating task...")
+    publishTask = asyncio.create_task(publish(queue,1,15,diff_files))
     async def publish_message():
-        while not tsk.done():
-            #logger.info("Proccessing message")
+        while not publishTask.done():
+            logger.info("task processing...")
             await asyncio.sleep(0) # why is this here...and why zero
     await publish_message()
 
 async def diffWatcher():
     #todo: diff watcher updates the diff list
-    print("We don't run this atm.")
+    logger.info("We don't run this atm.")
 
 try:
-    print('-'*88)
-    print("Starting the transcribe director app...this is a one-time run...re-run if you add new files.")
-    print('-'*88)
+    logger.info('-'*88)
+    logger.info("Starting the transcribe director app...this is a one-time run...re-run if you add new files.")
+    logger.info('-'*88)
     #todo: test connections: to dirs, to sqs
     diff_list = getFilePathsToTranscribe()
-    #print('-'*88)
-    #print("Here is our diff list:")
-    #logger.info(diff_list)
-    asyncio.ensure_future(createJobs(diff_list))
-    print("Entering infinite loop.")
-    loop.run_forever()
+    logger.info("Here is our diff list:")
+    logger.info(diff_list)
+    loop = asyncio.new_event_loop()
+    asyncio.run(publishJobs(diff_list))
 except KeyboardInterrupt:
     pass
 finally:
-    print("(main) Closing infinite loop.")
+    logger.info("Exiting...")
     loop.close()

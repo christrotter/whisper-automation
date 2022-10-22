@@ -3,5 +3,6 @@ WORKDIR /app
 
 RUN python3 -m pip install boto3 setuptools
 
+RUN mkdir /source && mkdir /dest
 COPY . /app
-RUN python main.py
+CMD [ "python", "main.py" ]
