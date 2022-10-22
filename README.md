@@ -13,10 +13,10 @@ I would say it's ~95% accurate - I was sufficiently impressed that I build this 
 2. Configure how many workers you want running (*how baller is your rig?*)
     - `docker-compose.yml -> deploy`
     - Suggest just doing one if you are uncertain.
-3. Run `./build.sh build && ./build.sh deploy`
+3. Run `./build.sh build deploy`
     - Subsequent runs only need: `./build.sh deploy`
-    - Note that the worker container image is `3.57GB`, so it'll take a while.
-4. Magic happens, your CPU usage goes bananas.
+    - Note that the worker container image is `3.57GB` (*ffmpeg, openai dependencies, whisper model cache, etc*), so it'll take a while.
+4. Magic happens, your CPU usage goes bananas. :fan:
 5. Go do other things like sleep.
 6. Check your progress: `watch -n 15 ./build.sh queue-stats`
 > There are 150 items in the queue, with 2 actively being processed.
