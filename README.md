@@ -98,6 +98,7 @@ Key points are...
 ```
 
 # Learnings
+- Fixing bugs by making hidden information visible - seeing the SQS stats helped me identify that the visible timeout was too short
 - Better docker stats: `docker stats --format "table {{.Name}}\t{{.Container}}\t{{.CPUPerc}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}"`
   - https://blog.dchidell.com/2018/01/29/better-docker-stats/
   - Which is still not great, cuz it's doing weird magic with stdout
@@ -113,6 +114,7 @@ Key points are...
 - Writing code for containers requires ensuring it works locally AND in the container
 - Using the power of containers with stuff like static cache - having the model download happen in-build vs. on-run, saves a lot of time
 - HTML in markdown
+- The length of the file to transcribe plays an order-of-magnitude part in 'time to transcribe' it feels like
 
 # Other sources I want to remember
 ## Whisper
@@ -142,6 +144,7 @@ Key points are...
 - moving worker from 'allofit' cpu to '1.5' dramatically slows the transcription process
   - need to experiment with this one...tried with '3'...my laptop cpu caught on fire
   - do some actual scientific testing of performance
+  - 4cpu on 2 workers seems to do ok...
 - ~~sqs queue contents are a black box; no way to know what messages are in the queue, and what messages are locked for processing~~
   - ~~need a 'sqs queue contents monitor' that doesn't actually pull messages...~~
   - ~~suspect you can get metrics for this in real SQS/CloudWatch (*msgs in queue, msgs w. lock*)~~
